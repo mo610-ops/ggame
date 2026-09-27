@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mody: Across the World for Shosho</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        :root {
+            --bg-color: #111;
+            --ui-bg: rgba(0, 0, 0, 0.85);
+            --border-color: #fff;
+            --text-main: #fff;
+            --text-highlight: #f0f;
+            --btn-bg: #333;
+            --btn-hover: #555;
+            --font-family: 'Press Start 2P', monospace;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            overflow: hidden;
+            font-family: var(--font-family);
+            touch-action: none; /* Prevent scroll/zoom on mobile */
+            color: var(--text-main);
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            max-width: 100%;
+            max-height: 100%;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            background-color: #87CEEB; /* Default sky blue */
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: var(--ui-bg);
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .ui-layer.active {
+            pointer-events: auto;
+            opacity: 1;
+        }
+
+        .panel {
+            background: #000;
+            border: 4px solid var(--border-color);
+            padding: 20px;
+            max-width: 80%;
+            max-height: 80%;
+            overflow-y: auto;
+            text-align: center;
+            box-shadow: 8px 8px 0px rgba(0, 0, 0, 0.5);
+        }
+
+        .panel::-webkit-scrollbar { width: 8px; }
+        .panel::-webkit-scrollbar-thumb { background: #fff; }
+
+        h1, h2 { color: var(--text-highlight); text-shadow: 2px 2px 0px #000; line-height: 1.5; margin-top:0;}
+        p { font-size: 10px; line-height: 1.6; }
+        
+        button {
+            font-family: var(--font-family);
+            background: var(--btn-bg);
+            color: var(--text-main);
+            border: 2px solid var(--border-color);
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        button:hover { background: var(--btn-hover); }
+        button:disabled { background: #222; color: #555; border-color: #555; cursor: not-allowed; }
+
+        .flex-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 10px;}
+        
+        /* Specific Menus */
+        .slot-btn { display: block; width: 100%; margin: 10px 0; padding: 15px; text-align: left; }
+        .shop-item { border: 2px solid #555; padding: 10px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center; text-align:left;}
+        .shop-item p { margin: 5px 0;}
+        
+        .letter-entry { border-bottom: 2px dashed #555; padding: 10px 0; text-align: left;}
+        .letter-entry:last-child { border: none; }
+        
+        #dialogue-box {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            background: rgba(0,0,0,0.9);
+            border: 4px solid var(--border-color);
+            padding: 15px;
+            z-index: 20;
+            display: none;
+        }
+        #dialogue-text { font-size: 12px; line-height: 1.5; }
+        #dialogue-prompt { font-size: 8px; text-align: right; margin-top: 10px; animation: blink 1s infinite;}
+        
+        @keyframes blink { 50% { opacity: 0; } }
+
+        #mobile-controls {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            width: 100%;
+            height: 120px;
+            display: none; /* Hidden on desktop */
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        @media (max-width: 800px) {
+            #mobile-controls { display: flex; justify-content: space-between; }
+        }
+
+        .control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            pointer-events: auto;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .control-btn:active { background: rgba(255, 255, 255, 0.5); }
+        
+        .d-pad { display: flex; gap: 10px; margin-left: 20px; align-items: flex-end; padding-bottom:10px;}
+        .action-pad { display: flex; gap: 10px; margin-right: 20px; align-items: flex-end; padding-bottom:10px; flex-wrap:wrap; width: 140px; justify-content:flex-end;}
+        
+        #btn-interact { width: 40px; height: 40px; font-size: 10px; position:absolute; top:-50px; right: 10px; border-radius: 5px;}
+
+        /* Fit the entire 16:9 game on any screen, including small phones. */
+        #gameCanvas {width:min(100vw, 177.7778vh);height:auto;aspect-ratio:16/9;object-fit:contain;}
+        #mobile-pause {position:absolute;top:8px;right:12px;width:42px;height:38px;margin:0;padding:0;pointer-events:auto;border-radius:9px;background:#111a;z-index:7;}
+        #mobile-controls {height:100%;bottom:0;align-items:flex-end;padding-bottom:max(8px,env(safe-area-inset-bottom));box-sizing:border-box;}
+        .control-btn {touch-action:none;-webkit-tap-highlight-color:transparent;}
+        @media (hover:none),(pointer:coarse) {#mobile-controls{display:flex;justify-content:space-between}}
+        @media (max-width:650px) {.d-pad{margin-left:8px;gap:5px}.action-pad{margin-right:8px;gap:5px}.control-btn{width:53px;height:53px}.panel{max-width:90%;padding:12px}button{font-size:10px}}
+        @media (orientation:portrait) {#mobile-controls{height:100%;}.d-pad,.action-pad{padding-bottom:10px}#gameCanvas{width:100vw;height:auto}}
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
+
+    <div id="mobile-controls">
+        <button id="mobile-pause" type="button" aria-label="Pause game" onclick="if(engine.state===STATE.PLAYING)ui.showMenu('pause');else if(engine.state===STATE.PAUSED)game.resume()">Ⅱ</button>
+        <div class="d-pad">
+            <div class="control-btn" id="btn-left">◀</div>
+            <div class="control-btn" id="btn-right">▶</div>
+        </div>
+        <div class="action-pad">
+            <div class="control-btn" id="btn-dash" style="width: 50px; height: 50px; font-size: 10px;">DASH</div>
+            <div class="control-btn" id="btn-jump">▲</div>
+            <div class="control-btn" id="btn-interact" style="display:none;">ACT</div>
+        </div>
+    </div>
+
+    <div id="menu-main" class="ui-layer active">
+        <div class="panel">
+            <h1>MODY<br><span style="font-size:12px; color:#fff;">Across the World for Shosho</span></h1>
+            <button onclick="ui.showMenu('saves')">Play Game</button>
+            <button onclick="ui.showMenu('controls')">Controls</button>
+            <button onclick="ui.showMenu('credits')">Credits</button>
+        </div>
+    </div>
+
+    <div id="menu-saves" class="ui-layer">
+        <div class="panel">
+            <h2>Select Save Slot</h2>
+            <div id="save-slots-container"></div>
+            <button onclick="ui.showMenu('main')">Back</button>
+        </div>
+    </div>
+
+    <div id="menu-pause" class="ui-layer">
+        <div class="panel">
+            <h2>Paused</h2>
+            <button onclick="game.resume()">Resume</button>
+            <button onclick="ui.showMenu('journal')">Love Journal</button>
+            <button onclick="ui.showMenu('shop')">Shop</button>
+            <button onclick="game.saveGame(); ui.showMenu('main')">Save & Quit</button>
+        </div>
+    </div>
+
+    <div id="menu-shop" class="ui-layer">
+        <div class="panel" style="width: 600px;">
+            <h2>Shop (NPC)</h2>
+            <p>Coins: <span id="shop-coins-display">0</span></p>
+            <div id="shop-items-container" style="max-height: 250px; overflow-y: auto;"></div>
+            <button onclick="ui.showMenu('pause')">Close Shop</button>
+        </div>
+    </div>
+
+    <div id="menu-journal" class="ui-layer">
+        <div class="panel" style="width: 600px;">
+            <h2>Love Journal</h2>
+            <p>Letters collected for Shosho:</p>
+            <div id="journal-container" style="max-height: 250px; overflow-y: auto; font-size:12px; margin-bottom:10px;"></div>
+            <button onclick="ui.showMenu('pause')">Close</button>
+        </div>
+    </div>
+
+    <div id="menu-controls" class="ui-layer">
+        <div class="panel">
+            <h2>Controls</h2>
+            <p style="text-align:left; font-size:12px;">
+                <b>Desktop:</b><br>
+                A/D or Arrows: Move<br>
+                Space/W/Up: Jump<br>
+                Shift: Dash (Unlockable)<br>
+                E: Interact/Shop<br>
+                Esc: Pause<br><br>
+                <b>Mobile:</b><br>
+                On-screen touch controls.
+            </p>
+            <button onclick="ui.showMenu('main')">Back</button>
+        </div>
+    </div>
+
+    <div id="menu-credits" class="ui-layer">
+        <div class="panel">
+            <h2>Credits</h2>
+            <p>A love story told in pixels.</p>
+            <p>Created entirely by AI.</p>
+            <button onclick="ui.showMenu('main')">Back</button>
+        </div>
+    </div>
+
+    <div id="dialogue-box">
+        <div id="dialogue-text">...</div>
+        <div id="dialogue-prompt">Press E / Tap ACT to continue</div>
+    </div>
+
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Constants
+const TILE_SIZE = 32;
+const GRAVITY = 0.4;
+const TERMINAL_VELOCITY = 12;
+const FRICTION = 0.8;
+const GAME_WIDTH = 800;
+const GAME_HEIGHT = 450;
+
+// Enums
+const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, CUTSCENE: 3, DEAD: 4, TRANSITION: 5 };
+const ENTITY_TYPE = { PLAYER: 0, BLOCK: 1, ENEMY: 2, COIN: 3, LETTER: 4, NPC: 5, BOSS: 6, PRINCESS: 7, PLATFORM: 8 };
+
+// Game State Object
+let engine = {
+    state: STATE.MENU,
+    lastTime: 0,
+    camera: { x: 0, y: 0, width: GAME_WIDTH, height: GAME_HEIGHT },
+    frame: 0,
+    currentSlot: 1,
+    bgLayers: [],
+    levelName: "",
+    transitionAlpha: 0,
+    transitionDir: 0 // 1 fading out, -1 fading in
+};
+
+// Player Save Data Structure
+let saveData = {
+    levelIndex: 0,
+    coins: 0,
+    maxHp: 3,
+    hp: 3,
+    letters: [], // Array of IDs
+    unlocks: {
+        doubleJump: false,
+        dash: false,
+        outfitIndex: 0 // 0: Default, 1: Ninja, 2: Golden
+    }
+};
+
+const OUTFIT_COLORS = [
+    { shirt: '#101116', pants: '#171820', hat: '#101116' }, // Mario style
+    { shirt: '#222222', pants: '#111111', hat: '#222222' }, // Ninja
+    { shirt: '#101116', pants: '#171820', hat: '#101116' }  // Golden
+];
+
+// Input Handling
+const keys = { left: false, right: false, up: false, down: false, dash: false, action: false, justAction: false };
+const touch = { left: false, right: false, up: false, dash: false, action: false };
+
+window.addEventListener('keydown', (e) => {
+    if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+    if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') keys.up = true;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = true;
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.dash = true;
+    if (e.code === 'KeyE') {
+        keys.action = true;
+        if (engine.state === STATE.PLAYING || engine.state === STATE.CUTSCENE) keys.justAction = true;
+    }
+    if (e.code === 'Escape') {
+        if (engine.state === STATE.PLAYING) ui.showMenu('pause');
+        else if (engine.state === STATE.PAUSED) game.resume();
+    }
+    
+    // Init audio on first interaction
+    audio.init();
+});
+
+window.addEventListener('keyup', (e) => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+    if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') keys.up = false;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false;
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.dash = false;
+    if (e.code === 'KeyE') keys.action = false;
+});
+
+// Touch controls setup
+function setupTouch(id, keyProp) {
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); touch[keyProp] = true; keys[keyProp] = true; audio.init(); }, {passive: false});
+    el.addEventListener('touchend', (e) => { e.preventDefault(); touch[keyProp] = false; keys[keyProp] = false; }, {passive: false});
+    el.addEventListener('touchcancel', () => { touch[keyProp] = false; keys[keyProp] = false; });
+}
+setupTouch('btn-left', 'left');
+setupTouch('btn-right', 'right');
+setupTouch('btn-jump', 'up');
+setupTouch('btn-dash', 'dash');
+setupTouch('btn-interact', 'action');
+
+// Intercept touch on interact to set justAction flag
+document.getElementById('btn-interact').addEventListener('touchstart', () => { if (dialogue.active) dialogue.next(); else keys.justAction = true; });
+
+const audio = {
+    ctx: null,
+    init: function() {
+        if (!this.ctx && (window.AudioContext || window.webkitAudioContext)) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    },
+    playTone: function(freq, type, duration, vol=0.1) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    },
+    jump: () => audio.playTone(300, 'square', 0.2, 0.05),
+    coin: () => { audio.playTone(800, 'sine', 0.1, 0.1); setTimeout(()=>audio.playTone(1200, 'sine', 0.1, 0.1), 100); },
+    hit: () => audio.playTone(100, 'sawtooth', 0.3, 0.1),
+    dash: () => audio.playTone(500, 'triangle', 0.15, 0.05),
+    powerup: () => {
+        [400, 500, 600, 800].forEach((f, i) => setTimeout(() => audio.playTone(f, 'square', 0.1, 0.1), i*100));
+    }
+};
+
+const LETTERS_DATA = {
+    1: { id: 1, text: "Dear Shosho,\nMy journey begins here. Every step takes me closer to you.", golden: false },
+    2: { id: 2, text: "Bahibek ya Shosho. The desert heat is nothing compared to my love.", golden: false },
+    3: { id: 3, text: "أنتي قمري (You are my moon).\nEven in the bright city lights, I only see you.", golden: false },
+    4: { id: 4, text: "Across worlds for you.\nThe mountains couldn't stop me.", golden: false },
+    5: { id: 5, text: "My heart beats your name.\nI am almost there.", golden: false },
+    99: { id: 99, text: "To my one and only Shosho.\nWill you marry me?", golden: true }
+};
+
+const LEVELS = [
+    {
+        name: "Hometown Valley",
+        theme: { bg: '#87CEEB', fg: '#228B22', ground: '#8B4513' }, // Sky, Grass, Dirt
+        music: null,
+        map: [
+            "                                                                                ",
+            "                                                                                ",
+            "                                                                                ",
+            "                                     CCCCC                                      ",
+            "          C            L1           #######                                     ",
+            "         ###          ####                     ##                  C     ###    ",
+            "M                E                                       S        ###           ",
+            "########################  #########   #####################     #######   ######",
+            "########################  #########   #####################     #######   ######",
+            "########################  #########   #####################     #######   ######"
+        ]
+    },
+    {
+        name: "Scorching Desert",
+        theme: { bg: '#FFA07A', fg: '#EDC9AF', ground: '#D2B48C' }, // Sunset, Sand light, Sand dark
+        map: [
+            "                                                                                ",
+            "                                                                                ",
+            "                                                   CC          L2               ",
+            "                            C        F            ####        ####              ",
+            "         ##     ##         ###                                                  ",
+            "M                      E           ###                            E       ###   ",
+            "######  ####   ####   #####       #####  E     #########     #######     #######",
+            "######  ####   ####   #####       #####       ##########     #######     #######",
+            "######  ####   ####   #####       #####       ##########     #######     #######"
+        ]
+    },
+    {
+        name: "Neon City Lights",
+        theme: { bg: '#191970', fg: '#708090', ground: '#2F4F4F' }, // Midnight, Slate, DarkSlate
+        map: [
+            "                 C                            C      L3         C               ",
+            "                ###                          ###    ####       ###              ",
+            "         C                            C                              C   ###    ",
+            "        ###                          ###                            ###         ",
+            "                   F                                     F                      ",
+            "M   ##        E          ##  E               S                      E           ",
+            "########    #######    #######      #####    ####      ####     ########   #####",
+            "########    #######    #######      #####    ####      ####     ########   #####",
+            "########    #######    #######      #####    ####      ####     ########   #####"
+        ]
+    },
+    {
+        name: "Moonlit Kingdom",
+        theme: { bg: '#000022', fg: '#E6E6FA', ground: '#483D8B' }, // Dark night, Pale moon, Slate blue
+        map: [
+            "                                                                                ",
+            "                                                                                ",
+            "              L4                         C      L5           F                  ",
+            "             ####              F        ###    ####                             ",
+            "                                                      ###          G            ",
+            "M  C                     ###                            C         ###           ",
+            "#######    E     ###           E            E          ###                  B  P",
+            "#######   ####  #####  ################   #####   ##############################",
+            "#######   ####  #####  ################   #####   ##############################"
+        ]
+    }
+];
+
+class Entity {
+    constructor(x, y, w, h, type) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.vx = 0;
+        this.vy = 0;
+        this.type = type;
+        this.active = true;
+    }
+    
+    // AABB Collision check
+    collides(other) {
+        return (this.x < other.x + other.w &&
+                this.x + this.w > other.x &&
+                this.y < other.y + other.h &&
+                this.y + this.h > other.y);
+    }
+}
+
+class Player extends Entity {
+    constructor(x, y) {
+        super(x, y, 24, 24, ENTITY_TYPE.PLAYER);
+        this.speed = 4;
+        this.jumpForce = -9;
+        this.isGrounded = false;
+        this.jumpsLeft = 1;
+        this.dashTimer = 0;
+        this.facingRight = true;
+        this.invulnerable = 0;
+        this.animTimer = 0;
+    }
+
+    update() {
+        if (!this.active) return;
+        
+        // Horizontal Movement
+        if (this.dashTimer <= 0) {
+            if (keys.left) { this.vx = -this.speed; this.facingRight = false; }
+            else if (keys.right) { this.vx = this.speed; this.facingRight = true; }
+            else { this.vx *= FRICTION; } // Friction
+            
+            if (Math.abs(this.vx) < 0.1) this.vx = 0;
+        }
+
+        // Dashing
+        if (keys.dash && saveData.unlocks.dash && this.dashTimer <= -30 && Math.abs(this.vx) > 0.5) {
+            this.dashTimer = 15;
+            this.vy = 0; // Suspend gravity briefly
+            audio.dash();
+            particles.createDashDust(this.x, this.y, this.facingRight);
+        }
+
+        if (this.dashTimer > 0) {
+            this.vx = this.facingRight ? this.speed * 2.5 : -this.speed * 2.5;
+            this.dashTimer--;
+        } else if (this.dashTimer > -60) {
+            this.dashTimer--; // Cooldown
+        }
+
+        // Apply Horizontal
+        this.x += this.vx;
+        this.checkCollisions(true);
+
+        // Vertical Movement (Gravity & Jump)
+        if (this.dashTimer <= 0) {
+            this.vy += GRAVITY;
+            if (this.vy > TERMINAL_VELOCITY) this.vy = TERMINAL_VELOCITY;
+        }
+
+        // Jump logic
+        let maxJumps = saveData.unlocks.doubleJump ? 2 : 1;
+        if (this.isGrounded) this.jumpsLeft = maxJumps;
+
+        if (keys.up) {
+            // Need a way to prevent holding jump to fly.
+            // Simplified: require releasing jump (handled in key handler somewhat, but let's use a flag)
+            if (!this.jumpHeld && this.jumpsLeft > 0) {
+                this.vy = this.jumpForce;
+                this.jumpsLeft--;
+                this.isGrounded = false;
+                audio.jump();
+                particles.createDust(this.x + this.w/2, this.y + this.h);
+            }
+            this.jumpHeld = true;
+        } else {
+            this.jumpHeld = false;
+            // Variable jump height
+            if (this.vy < -3) this.vy = -3; 
+        }
+
+        // Apply Vertical
+        this.y += this.vy;
+        this.isGrounded = false;
+        this.checkCollisions(false);
+
+        // Timers
+        if (this.invulnerable > 0) this.invulnerable--;
+        
+        // Animation
+        if (Math.abs(this.vx) > 0.5 && this.isGrounded) this.animTimer++;
+        else this.animTimer = 0;
+        
+        // Death by falling
+        if (this.y > GAME_HEIGHT) this.takeDamage(999);
+    }
+
+    checkCollisions(isHorizontal) {
+        for (let b of map.blocks) {
+            if (this.collides(b)) {
+                if (isHorizontal) {
+                    if (this.vx > 0) this.x = b.x - this.w;
+                    else if (this.vx < 0) this.x = b.x + b.w;
+                    this.vx = 0;
+                } else {
+                    if (this.vy > 0) { // Falling
+                        this.y = b.y - this.h;
+                        this.isGrounded = true;
+                    } else if (this.vy < 0) { // Hitting head
+                        this.y = b.y + b.h;
+                    }
+                    this.vy = 0;
+                }
+            }
+        }
+    }
+
+    takeDamage(amount) {
+        if (this.invulnerable > 0 || !this.active) return;
+        saveData.hp -= amount;
+        audio.hit();
+        if (saveData.hp <= 0) {
+            this.active = false;
+            engine.state = STATE.DEAD;
+            setTimeout(() => game.restartLevel(), 1500);
+        } else {
+            this.invulnerable = 60; // 1 second i-frames
+            this.vy = -5;
+            this.vx = this.facingRight ? -3 : 3;
+        }
+    }
+
+    draw(ctx, camX) {
+        if (!this.active || (this.invulnerable > 0 && engine.frame % 10 < 5)) return;
+
+        let px = this.x - camX;
+        let py = this.y;
+        let colors = OUTFIT_COLORS[saveData.unlocks.outfitIndex] || OUTFIT_COLORS[0];
+
+        // Mody: black tousled hair, tailored black suit, white shirt and tie.
+        const r = (x,y,w,h,c) => {ctx.fillStyle=c;ctx.fillRect(Math.round(px+x),Math.round(py+y),w,h);};
+        const stride = this.animTimer ? (Math.floor(this.animTimer/5)%2?2:-2) : 0;
+        const skin='#e6ae8d';
+        r(4,19+stride,7,5,'#171820');r(13,19-stride,7,5,'#171820');
+        r(3,23+stride,9,2,'#090a0d');r(13,23-stride,9,2,'#090a0d');
+        r(2,10,20,11,'#0c0d12'); // jacket
+        r(9,10,6,9,'#f7f4ee'); // white shirt
+        r(11,11,2,7,'#25252d'); // black tie
+        r(3,11,6,7,'#20212a');r(15,11,6,7,'#20212a'); // lapels
+        r(0,11,4,9,'#101116');r(20,11,4,9,'#101116'); // sleeves
+        r(0,19,4,3,skin);r(20,19,4,3,skin);
+        r(5,1,14,10,skin);r(4,2,2,6,skin);r(19,3,2,5,skin);
+        // Unmistakable black hair, no hat.
+        r(3,-3,18,6,'#090a0d');r(5,-5,6,4,'#090a0d');
+        r(12,-4,8,4,'#090a0d');r(3,1,5,5,'#090a0d');
+        r(8,1,4,3,'#090a0d');r(17,0,4,4,'#090a0d');
+        r(this.facingRight?16:7,5,2,2,'#211817');
+        r(this.facingRight?15:8,9,1,2,'#bc826f');
+
+    }
+}
+
+class Enemy extends Entity {
+    constructor(x, y, isFlying) {
+        super(x, y, 24, 24, ENTITY_TYPE.ENEMY);
+        this.startX = x;
+        this.vx = -1.5;
+        this.isFlying = isFlying;
+        if (isFlying) {
+            this.vy = 0;
+            this.startY = y;
+            this.sinOffset = Math.random() * Math.PI * 2;
+        }
+    }
+
+    update() {
+        if (!this.active) return;
+
+        if (this.isFlying) {
+            this.x += this.vx;
+            this.y = this.startY + Math.sin(engine.frame * 0.05 + this.sinOffset) * 30;
+        } else {
+            this.vy += GRAVITY;
+            this.x += this.vx;
+            this.y += this.vy;
+            
+            // Simple map collision
+            let onGround = false;
+            let hitWall = false;
+            for (let b of map.blocks) {
+                if (this.collides(b)) {
+                    // Y resolve
+                    if (this.vy > 0 && this.y + this.h - this.vy <= b.y) {
+                        this.y = b.y - this.h;
+                        this.vy = 0;
+                        onGround = true;
+                    } 
+                    // X resolve (wall hit)
+                    else {
+                         hitWall = true;
+                    }
+                }
+            }
+            
+            // Reverse on wall or edge (edge detection logic simplified: if not on ground and was on ground, reverse. 
+            // Better way: check point ahead and below)
+            let nextTileX = this.vx > 0 ? this.x + this.w + 2 : this.x - 2;
+            let nextTileY = this.y + this.h + 2;
+            let hasFloorAhead = map.blocks.some(b => 
+                nextTileX > b.x && nextTileX < b.x + b.w && 
+                nextTileY > b.y && nextTileY < b.y + b.h
+            );
+
+            if (hitWall || (onGround && !hasFloorAhead)) {
+                this.vx *= -1;
+            }
+        }
+
+        // Player Interaction
+        if (player.collides(this) && player.invulnerable <= 0) {
+            // Check if player jumped on head
+            if (player.vy > 0 && player.y + player.h - player.vy <= this.y + this.h/2) {
+                this.active = false;
+                player.vy = -6; // Bounce
+                audio.hit(); // Maybe a 'bop' sound
+                particles.createExplosion(this.x + this.w/2, this.y + this.h/2, '#A52A2A');
+            } else {
+                player.takeDamage(1);
+            }
+        }
+    }
+
+    draw(ctx, camX) {
+        if (!this.active) return;
+        let px = this.x - camX;
+        ctx.fillStyle = this.isFlying ? '#800080' : '#A52A2A'; // Purple fly, Brown ground
+        ctx.fillRect(px, this.y, this.w, this.h);
+        
+        // Eyes
+        ctx.fillStyle = '#FFF';
+        ctx.fillRect(px + 4, this.y + 4, 4, 4);
+        ctx.fillRect(px + 16, this.y + 4, 4, 4);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(px + (this.vx > 0 ? 6 : 4), this.y + 6, 2, 2);
+        ctx.fillRect(px + (this.vx > 0 ? 18 : 16), this.y + 6, 2, 2);
+        
+        if (this.isFlying) {
+            // Wings
+            ctx.fillStyle = '#ccc';
+            let wingOffset = Math.sin(engine.frame * 0.5) * 5;
+            ctx.fillRect(px - 10, this.y + 5 + wingOffset, 10, 4);
+            ctx.fillRect(px + this.w, this.y + 5 + wingOffset, 10, 4);
+        }
+    }
+}
+
+class Boss extends Entity {
+    constructor(x, y) {
+        super(x, y, 64, 64, ENTITY_TYPE.BOSS);
+        this.hp = 3;
+        this.state = 'idle'; // idle, jump, charge
+        this.timer = 0;
+        this.color = '#8B0000';
+    }
+
+    update() {
+        if (!this.active) return;
+        
+        // Gravity
+        this.vy += GRAVITY;
+        this.x += this.vx;
+        this.y += this.vy;
+        
+        let onGround = false;
+        for (let b of map.blocks) {
+            if (this.collides(b)) {
+                if (this.vy > 0 && this.y + this.h - this.vy <= b.y) {
+                    this.y = b.y - this.h;
+                    this.vy = 0;
+                    onGround = true;
+                } else if(this.vx !== 0) {
+                     this.vx *= -1; // Bounce off walls
+                }
+            }
+        }
+
+        // State Machine
+        this.timer++;
+        if (this.state === 'idle') {
+            this.vx = 0;
+            if (this.timer > 60) {
+                this.state = Math.random() > 0.5 ? 'jump' : 'charge';
+                this.timer = 0;
+            }
+        } else if (this.state === 'jump') {
+            if (this.timer === 1 && onGround) {
+                this.vy = -12;
+                this.vx = (player.x > this.x ? 1 : -1) * 3;
+                audio.jump(); // Lower pitch ideally
+            }
+            if (onGround && this.timer > 10) {
+                this.state = 'idle';
+                this.timer = 0;
+            }
+        } else if (this.state === 'charge') {
+            if (this.timer === 1) {
+                this.vx = (player.x > this.x ? 1 : -1) * 6;
+            }
+            if (this.timer > 40) {
+                this.state = 'idle';
+                this.timer = 0;
+            }
+        }
+
+        // Collision with player
+        if (player.collides(this) && player.invulnerable <= 0) {
+            if (player.vy > 0 && player.y + player.h - player.vy <= this.y + 10) {
+                // Hit boss
+                this.hp--;
+                player.vy = -8; // Big bounce
+                audio.hit();
+                this.timer = 0;
+                this.state = 'idle';
+                particles.createExplosion(this.x + this.w/2, this.y, '#FF0');
+                
+                if (this.hp <= 0) {
+                    this.active = false;
+                    particles.createExplosion(this.x + this.w/2, this.y + this.h/2, '#8B0000', 30);
+                    // Open path to princess (remove blocks behind boss if needed, or just let player pass)
+                }
+            } else {
+                player.takeDamage(1);
+            }
+        }
+    }
+
+    draw(ctx, camX) {
+        if (!this.active) return;
+        let px = this.x - camX;
+        
+        // Body shaking if charging
+        let offsetX = (this.state === 'charge') ? (Math.random()-0.5)*4 : 0;
+        
+        ctx.fillStyle = this.color;
+        ctx.fillRect(px + offsetX, this.y, this.w, this.h);
+        
+        // Angry Eyes
+        ctx.fillStyle = '#000';
+        ctx.fillRect(px + offsetX + 10, this.y + 10, 15, 10);
+        ctx.fillRect(px + offsetX + 39, this.y + 10, 15, 10);
+        ctx.fillStyle = '#F00';
+        ctx.fillRect(px + offsetX + 15, this.y + 12, 5, 5);
+        ctx.fillRect(px + offsetX + 44, this.y + 12, 5, 5);
+        
+        // Crown
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.moveTo(px + offsetX, this.y);
+        ctx.lineTo(px + offsetX + 16, this.y - 20);
+        ctx.lineTo(px + offsetX + 32, this.y);
+        ctx.lineTo(px + offsetX + 48, this.y - 20);
+        ctx.lineTo(px + offsetX + 64, this.y);
+        ctx.fill();
+    }
+}
+
+class Collectible extends Entity {
+    constructor(x, y, type, id = null) {
+        super(x, y, 16, 16, type);
+        this.id = id;
+        this.baseY = y;
+    }
+
+    update() {
+        if (!this.active) return;
+        this.y = this.baseY + Math.sin(engine.frame * 0.1) * 4;
+
+        if (player.collides(this)) {
+            this.active = false;
+            if (this.type === ENTITY_TYPE.COIN) {
+                saveData.coins++;
+                audio.coin();
+                particles.createFloatText("+1", this.x, this.y, '#FFD700');
+            } else if (this.type === ENTITY_TYPE.LETTER) {
+                if (!saveData.letters.includes(this.id)) {
+                    saveData.letters.push(this.id);
+                }
+                audio.powerup();
+                particles.createFloatText("Letter!", this.x, this.y, '#fff');
+                const letter = LETTERS_DATA[this.id] || { text: "Dear Shosho,\nEvery step brings me closer to you." };
+                dialogue.show(`Found Letter:\n"${letter.text}"`);
+            }
+        }
+    }
+
+    draw(ctx, camX) {
+        if (!this.active) return;
+        let px = this.x - camX;
+        if (this.type === ENTITY_TYPE.COIN) {
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(px + 8, this.y + 8, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#DAA520';
+            ctx.beginPath();
+            ctx.arc(px + 8, this.y + 8, 4, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (this.type === ENTITY_TYPE.LETTER) {
+            let isGolden = LETTERS_DATA[this.id]?.golden;
+            ctx.fillStyle = isGolden ? '#FFD700' : '#FFF';
+            ctx.fillRect(px, this.y, 20, 14);
+            ctx.fillStyle = isGolden ? '#DAA520' : '#CCC';
+            ctx.beginPath();
+            ctx.moveTo(px, this.y);
+            ctx.lineTo(px + 10, this.y + 8);
+            ctx.lineTo(px + 20, this.y);
+            ctx.fill();
+            ctx.fillStyle = '#F00';
+            ctx.fillRect(px + 8, this.y + 4, 4, 4); // wax seal
+        }
+    }
+}
+
+class Particle {
+    constructor(x, y, vx, vy, color, life, text=null) {
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.color = color; this.life = life; this.maxLife = life;
+        this.text = text;
+        this.active = true;
+    }
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        this.life--;
+        if (this.life <= 0) this.active = false;
+    }
+    draw(ctx, camX) {
+        if (!this.active) return;
+        ctx.globalAlpha = this.life / this.maxLife;
+        if (this.text) {
+            ctx.fillStyle = this.color;
+            ctx.font = '10px "Press Start 2P"';
+            ctx.fillText(this.text, this.x - camX, this.y);
+        } else {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x - camX, this.y, 4, 4);
+        }
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+const particles = {
+    list: [],
+    update: function() {
+        this.list.forEach(p => p.update());
+        this.list = this.list.filter(p => p.active);
+    },
+    draw: function(ctx, camX) {
+        this.list.forEach(p => p.draw(ctx, camX));
+    },
+    createDust: function(x, y) {
+        for(let i=0; i<3; i++) {
+            this.list.push(new Particle(x, y, (Math.random()-0.5)*2, -Math.random()*2, '#ccc', 20));
+        }
+    },
+    createDashDust: function(x, y, right) {
+        for(let i=0; i<5; i++) {
+            this.list.push(new Particle(x, y + Math.random()*20, right?-2-Math.random()*2 : 2+Math.random()*2, -Math.random(), '#aaa', 15));
+        }
+    },
+    createExplosion: function(x, y, color, count=10) {
+        for(let i=0; i<count; i++) {
+            this.list.push(new Particle(x, y, (Math.random()-0.5)*6, (Math.random()-0.5)*6, color, 30));
+        }
+    },
+    createFloatText: function(text, x, y, color) {
+        this.list.push(new Particle(x, y, 0, -1, color, 45, text));
+    }
+};
+
+let player = null;
+let map = { blocks: [], enemies: [], items: [], interactables: [] };
+
+function loadLevel(index) {
+    if (index >= LEVELS.length) {
+        // Game Beat
+        triggerEnding();
+        return;
+    }
+    
+    engine.levelIndex = index;
+    saveData.levelIndex = index;
+    const levelData = LEVELS[index];
+    engine.levelName = levelData.name;
+    
+    map.blocks = []; map.enemies = []; map.items = []; map.interactables = [];
+    particles.list = [];
+    
+    const rows = levelData.map;
+    for (let y = 0; y < rows.length; y++) {
+        for (let x = 0; x < rows[y].length; x++) {
+            let char = rows[y][x];
+            let px = x * TILE_SIZE;
+            let py = y * TILE_SIZE;
+            
+            if (char === '#') map.blocks.push(new Entity(px, py, TILE_SIZE, TILE_SIZE, ENTITY_TYPE.BLOCK));
+            else if (char === 'M') player = new Player(px, py);
+            else if (char === 'C') map.items.push(new Collectible(px + 8, py + 8, ENTITY_TYPE.COIN));
+            else if (char === 'E') map.enemies.push(new Enemy(px, py, false));
+            else if (char === 'F') map.enemies.push(new Enemy(px, py, true));
+            else if (char === 'B') map.enemies.push(new Boss(px, py - 32)); // Boss is 2 tiles high
+            else if (char === 'L' || char === 'G') {
+                let id = 1;
+                if (char === 'G') {
+                    id = 99;
+                } else {
+                    let nextChar = rows[y][x + 1];
+                    let parsed = parseInt(nextChar);
+                    if (!isNaN(parsed)) {
+                        id = parsed;
+                    }
+                }
+                // Dont spawn if already collected
+                if (!saveData.letters.includes(id)) {
+                    map.items.push(new Collectible(px + 6, py + 8, ENTITY_TYPE.LETTER, id));
+                }
+            }
+            else if (char === 'S') map.interactables.push({x: px, y: py, w: 32, h: 32, type: 'SHOP'});
+            else if (char === 'P') map.interactables.push({x: px, y: py, w: 32, h: 32, type: 'PRINCESS'});
+        }
+    }
+    
+    // Set level bounds
+    engine.mapWidth = rows[0].length * TILE_SIZE;
+    
+    // Generate simple parallax background based on theme
+    engine.bgLayers = [];
+    let theme = levelData.theme;
+    canvas.style.backgroundColor = theme.bg;
+    
+    // Distant mountains/cityscape
+    let layer1 = document.createElement('canvas'); layer1.width = engine.mapWidth/2; layer1.height = GAME_HEIGHT;
+    let ctx1 = layer1.getContext('2d');
+    ctx1.fillStyle = theme.fg;
+    for(let i=0; i<50; i++) {
+        let w = 50 + Math.random()*100;
+        let h = 50 + Math.random()*200;
+        ctx1.fillRect(Math.random()*layer1.width, GAME_HEIGHT - h, w, h);
+    }
+    engine.bgLayers.push({canvas: layer1, speed: 0.2});
+
+    engine.state = STATE.TRANSITION;
+    engine.transitionAlpha = 1;
+    engine.transitionDir = -0.02; // Fade in
+}
+
+const game = {
+    start: function(slot) {
+        engine.currentSlot = slot;
+        saveSystem.load(slot);
+        loadLevel(saveData.levelIndex);
+        ui.hideAll();
+        document.getElementById('btn-interact').style.display = 'flex';
+    },
+    saveGame: function() {
+        saveSystem.save(engine.currentSlot);
+    },
+    resume: function() {
+        ui.hideAll();
+        engine.state = STATE.PLAYING;
+    },
+    restartLevel: function() {
+        // Reset hp, keep coins/letters collected so far (forgiving design)
+        saveData.hp = saveData.maxHp;
+        loadLevel(engine.levelIndex);
+    },
+    loop: function(timestamp) {
+        let dt = timestamp - engine.lastTime;
+        engine.lastTime = timestamp;
+        
+        update();
+        render();
+        
+        requestAnimationFrame(game.loop);
+    }
+};
+
+function update() {
+    engine.frame++;
+    
+    if (engine.state === STATE.TRANSITION) {
+        engine.transitionAlpha += engine.transitionDir;
+        if (engine.transitionAlpha <= 0) {
+            engine.transitionAlpha = 0;
+            engine.state = STATE.PLAYING;
+        } else if (engine.transitionAlpha >= 1) {
+            // Next level load happens here if fading out
+            loadLevel(engine.levelIndex + 1);
+        }
+        return;
+    }
+    
+    if (engine.state !== STATE.PLAYING && engine.state !== STATE.CUTSCENE) return;
+
+    if (player) player.update();
+    if (engine.state === STATE.CUTSCENE) { keys.justAction = false; return; }
+    map.enemies.forEach(e => e.update());
+    map.items.forEach(i => i.update());
+    particles.update();
+    
+    // Interactables
+    document.getElementById('btn-interact').style.borderColor = 'rgba(255, 255, 255, 0.5)';
+    let canInteract = false;
+    for (let int of map.interactables) {
+        if (player.x < int.x + int.w && player.x + player.w > int.x &&
+            player.y < int.y + int.h && player.y + player.h > int.y) {
+            
+            canInteract = true;
+            document.getElementById('btn-interact').style.borderColor = '#0f0'; // Highlight button
+            particles.createFloatText("E", int.x+10, int.y-10, '#fff'); // Desktop hint
+
+            if (keys.justAction) {
+                if (int.type === 'SHOP') {
+                    engine.state = STATE.PAUSED;
+                    ui.showMenu('shop');
+                    shop.render();
+                } else if (int.type === 'PRINCESS') {
+                    triggerEnding();
+                }
+            }
+        }
+    }
+    
+    // Level Transition trigger (Walk off right edge)
+    if (player && player.x > engine.mapWidth - 30 && engine.state === STATE.PLAYING) {
+        engine.state = STATE.TRANSITION;
+        engine.transitionDir = 0.02; // Fade out
+    }
+    
+    keys.justAction = false;
+    
+    // Update Camera
+    if (player) {
+        let targetX = player.x - GAME_WIDTH / 2 + player.w / 2;
+        // Clamp camera
+        targetX = Math.max(0, Math.min(targetX, engine.mapWidth - GAME_WIDTH));
+        // Smooth camera
+        engine.camera.x += (targetX - engine.camera.x) * 0.1;
+    }
+}
+
+function render() {
+    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    let camX = engine.camera.x;
+    
+    // Parallax BGs
+    engine.bgLayers.forEach(layer => {
+        let offsetX = (camX * layer.speed) % layer.canvas.width;
+        ctx.drawImage(layer.canvas, -offsetX, 0);
+        ctx.drawImage(layer.canvas, -offsetX + layer.canvas.width, 0);
+    });
+
+    let theme = LEVELS[engine.levelIndex]?.theme;
+
+    // Draw Blocks
+    ctx.fillStyle = theme ? theme.ground : '#555';
+    map.blocks.forEach(b => {
+        // Frustum culling
+        if (b.x + b.w > camX && b.x < camX + GAME_WIDTH) {
+            ctx.fillRect(b.x - camX, b.y, b.w, b.h);
+            // Block top highlight
+            ctx.fillStyle = theme ? theme.fg : '#777';
+            ctx.fillRect(b.x - camX, b.y, b.w, 4);
+            ctx.fillStyle = theme ? theme.ground : '#555'; // reset
+        }
+    });
+
+    // Draw Interactables (NPC, Princess)
+    map.interactables.forEach(int => {
+        let px = int.x - camX;
+        if (int.type === 'SHOP') {
+            ctx.fillStyle = '#8B4513'; ctx.fillRect(px, int.y, 32, 32); // Booth
+            ctx.fillStyle = '#FFF'; ctx.fillRect(px+4, int.y+4, 24, 10); // Awning
+            ctx.fillStyle = '#00F'; ctx.fillRect(px+12, int.y+14, 8, 18); // NPC
+        } else if (int.type === 'PRINCESS') {
+            // Shosho: flowing brown hair and a bright pink princess dress.
+            const r=(x,y,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(Math.round(px+x),Math.round(int.y+y),w,h);};
+            r(7,-2,19,19,'#74432c');r(5,4,5,16,'#74432c');r(23,3,5,17,'#74432c');
+            r(10,1,13,12,'#f0bb9c');r(11,1,11,3,'#75432b');
+            r(13,6,2,2,'#38211b');r(20,6,2,2,'#38211b');
+            r(15,10,5,1,'#bd6b73');
+            r(10,14,13,9,'#ff73ba');r(6,21,21,7,'#fa4fa5');
+            r(3,27,27,6,'#ed398e');r(7,18,3,8,'#f0bb9c');r(23,18,3,8,'#f0bb9c');
+            r(13,-5,3,5,'#ffe58b');r(17,-7,3,7,'#ffe58b');r(21,-5,3,5,'#ffe58b');
+            r(12,-2,13,3,'#f4c94c');
+
+        }
+    });
+
+    // Entities
+    map.items.forEach(i => i.draw(ctx, camX));
+    map.enemies.forEach(e => e.draw(ctx, camX));
+    if (player) player.draw(ctx, camX);
+    particles.draw(ctx, camX);
+
+    // HUD
+    drawHUD();
+
+    // Transitions / Fades
+    if (engine.state === STATE.TRANSITION || engine.transitionAlpha > 0) {
+        ctx.fillStyle = `rgba(0, 0, 0, ${engine.transitionAlpha})`;
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    }
+}
+
+function drawHUD() {
+    // Hearts
+    for(let i=0; i<saveData.maxHp; i++) {
+        ctx.fillStyle = i < saveData.hp ? '#F00' : '#444';
+        let hx = 20 + i*25;
+        let hy = 20;
+        // Draw simple pixel heart
+        ctx.fillRect(hx+4, hy, 4, 4); ctx.fillRect(hx+12, hy, 4, 4);
+        ctx.fillRect(hx, hy+4, 20, 8);
+        ctx.fillRect(hx+4, hy+12, 12, 4);
+        ctx.fillRect(hx+8, hy+16, 4, 4);
+    }
+
+    // Coins
+    ctx.fillStyle = '#FFD700';
+    ctx.beginPath(); ctx.arc(GAME_WIDTH - 80, 28, 8, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#FFF';
+    ctx.font = '16px "Press Start 2P"';
+    ctx.textAlign = 'left';
+    ctx.fillText(`x${saveData.coins}`, GAME_WIDTH - 65, 34);
+    
+    // Level Name (fades out)
+    if (engine.frame < 180 && engine.state === STATE.PLAYING) {
+        ctx.globalAlpha = Math.max(0, 1 - (engine.frame - 120)/60);
+        ctx.fillStyle = '#FFF';
+        ctx.textAlign = 'center';
+        ctx.font = '24px "Press Start 2P"';
+        ctx.fillText(engine.levelName, GAME_WIDTH/2, GAME_HEIGHT/4);
+        ctx.globalAlpha = 1;
+    }
+}
+
+const ui = {
+    showMenu: function(id) {
+        document.querySelectorAll('.ui-layer').forEach(el => el.classList.remove('active'));
+        if (id) {
+            document.getElementById(`menu-${id}`).classList.add('active');
+            engine.state = id === 'main' || id === 'saves' || id === 'controls' || id === 'credits' ? STATE.MENU : STATE.PAUSED;
+            if(id === 'saves') this.renderSaves();
+            if(id === 'journal') this.renderJournal();
+        }
+    },
+    hideAll: function() {
+        document.querySelectorAll('.ui-layer').forEach(el => el.classList.remove('active'));
+    },
+    renderSaves: function() {
+        const container = document.getElementById('save-slots-container');
+        container.innerHTML = '';
+        for(let i=1; i<=3; i++) {
+            let data = localStorage.getItem(`mody_save_${i}`);
+            let btn = document.createElement('button');
+            btn.className = 'slot-btn';
+            if (data) {
+                let parsed = JSON.parse(data);
+                btn.innerHTML = `Slot ${i}: Level ${parsed.levelIndex+1} | Coins: ${parsed.coins}`;
+            } else {
+                btn.innerHTML = `Slot ${i}: Empty`;
+            }
+            btn.onclick = () => game.start(i);
+            container.appendChild(btn);
+        }
+    },
+    renderJournal: function() {
+        const container = document.getElementById('journal-container');
+        container.innerHTML = '';
+        if (saveData.letters.length === 0) {
+            container.innerHTML = '<p>No letters found yet.</p>';
+            return;
+        }
+        
+        let foundGolden = false;
+        saveData.letters.forEach(id => {
+            let letter = LETTERS_DATA[id];
+            if(letter) {
+                if (letter.golden) foundGolden = true;
+                let div = document.createElement('div');
+                div.className = 'letter-entry';
+                div.style.color = letter.golden ? '#FFD700' : '#FFF';
+                div.innerText = letter.text;
+                container.appendChild(div);
+            }
+        });
+        
+        if(foundGolden) {
+             let div = document.createElement('div');
+             div.innerHTML = "<br><i>The Golden Letter reveals the path to the Secret Ending...</i>";
+             container.appendChild(div);
+        }
+    }
+};
+
+const saveSystem = {
+    save: function(slot) {
+        localStorage.setItem(`mody_save_${slot}`, JSON.stringify(saveData));
+    },
+    load: function(slot) {
+        let data = localStorage.getItem(`mody_save_${slot}`);
+        if (data) {
+            saveData = JSON.parse(data);
+            // Handle backwards compatibility if new fields added or invalid IDs saved
+            if (saveData.unlocks.outfitIndex === undefined) saveData.unlocks.outfitIndex = 0;
+            if (Array.isArray(saveData.letters)) {
+                saveData.letters = saveData.letters.filter(id => typeof id === 'number' && !isNaN(id));
+            } else {
+                saveData.letters = [];
+            }
+        } else {
+            // New Game Defaults
+            saveData = {
+                levelIndex: 0, coins: 0, maxHp: 3, hp: 3, letters: [],
+                unlocks: { doubleJump: false, dash: false, outfitIndex: 0 }
+            };
+        }
+    }
+};
+
+const shop = {
+    items: [
+        { id: 'hp', name: '+1 Max Health', cost: 10, check: () => saveData.maxHp < 5, apply: () => { saveData.maxHp++; saveData.hp = saveData.maxHp; } },
+        { id: 'dj', name: 'Double Jump', cost: 15, check: () => !saveData.unlocks.doubleJump, apply: () => saveData.unlocks.doubleJump = true },
+        { id: 'dash', name: 'Dash Ability', cost: 20, check: () => !saveData.unlocks.dash, apply: () => saveData.unlocks.dash = true },
+        { id: 'outfit1', name: 'Ninja Outfit', cost: 30, check: () => saveData.unlocks.outfitIndex < 1, apply: () => saveData.unlocks.outfitIndex = 1 },
+        { id: 'outfit2', name: 'Golden Outfit', cost: 50, check: () => saveData.unlocks.outfitIndex < 2, apply: () => saveData.unlocks.outfitIndex = 2 }
+    ],
+    render: function() {
+        document.getElementById('shop-coins-display').innerText = saveData.coins;
+        const container = document.getElementById('shop-items-container');
+        container.innerHTML = '';
+        
+        this.items.forEach(item => {
+            let div = document.createElement('div');
+            div.className = 'shop-item';
+            let canBuy = item.check();
+            div.innerHTML = `
+                <div>
+                    <p>${item.name}</p>
+                    <p style="color:#FFD700; font-size:10px;">Cost: ${item.cost} coins</p>
+                </div>
+            `;
+            let btn = document.createElement('button');
+            if (canBuy) {
+                btn.innerText = "BUY";
+                btn.disabled = saveData.coins < item.cost;
+                btn.onclick = () => {
+                    saveData.coins -= item.cost;
+                    item.apply();
+                    audio.powerup();
+                    this.render(); // Re-render
+                };
+            } else {
+                btn.innerText = "SOLD OUT";
+                btn.disabled = true;
+            }
+            div.appendChild(btn);
+            container.appendChild(div);
+        });
+    }
+};
+
+const dialogue = {
+    box: document.getElementById('dialogue-box'),
+    textEl: document.getElementById('dialogue-text'),
+    queue: [],
+    active: false,
+    show: function(textArray) {
+        if (!Array.isArray(textArray)) textArray = [textArray];
+        this.queue = textArray;
+        this.active = true;
+        this.box.style.display = 'block';
+        engine.state = STATE.CUTSCENE;
+        this.next();
+    },
+    next: function() {
+        if (this.queue.length > 0) {
+            this.textEl.innerText = this.queue.shift();
+        } else {
+            this.active = false;
+            this.box.style.display = 'none';
+            // Resume or End game based on context
+            if (engine.levelIndex >= LEVELS.length - 1 && player && player.x > engine.mapWidth - 100) {
+                // Was ending cutscene
+                ui.showMenu('credits');
+            } else {
+                engine.state = STATE.PLAYING;
+            }
+        }
+    }
+};
+
+// Hook dialogue advance to Action key during cutscene
+const originalKeydown = window.onkeydown;
+window.addEventListener('keydown', (e) => {
+    if ((e.code === 'KeyE' || e.code === 'Space') && dialogue.active) {
+        dialogue.next();
+    }
+});
+
+function triggerEnding() {
+    engine.state = STATE.CUTSCENE;
+    if (dialogue.active) return;
+    player.vx = 0; player.vy = 0; // stop player
+    
+    let hasGolden = saveData.letters.includes(99);
+    
+    let text = [
+        "Mody! You made it across the world!",
+        "Shosho! I crossed deserts and cities just to see your smile."
+    ];
+    
+    if (hasGolden) {
+        text.push("Mody drops to one knee...");
+        text.push("Shosho, will you marry me?");
+        text.push("Oh Mody... YES! A thousand times yes!");
+        text.push("SECRET ENDING UNLOCKED: Happily Ever After.");
+    } else {
+        text.push("I brought you all the coins and letters I could find.");
+        text.push("Thank you Mody. You are my hero.");
+        text.push("STANDARD ENDING.");
+        text.push("(Hint: Find the Golden Letter for the true ending!)");
+    }
+    
+    dialogue.show(text);
+}
+
+
+requestAnimationFrame(game.loop);
+
+</script>
+</body>
+</html>
